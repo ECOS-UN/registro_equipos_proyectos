@@ -67,14 +67,4 @@ Para que no te confundas, el sistema te habla a través de colores en la tabla d
   * *El sistema te mostrará una etiqueta amarilla detallada: `⚠️ Asignado en Hora: X, Salón: Y (Equipo Name)`.*
   * *Esta alerta es 100% informativa. Si el alumno tiene permitido trabajar en ambos proyectos, puedes seleccionarlo y guardarlo normalmente.*
 
----
 
-## 🗄️ Estructura de la Base de Datos (Google Sheets)
-
-El sistema lee y escribe de manera automatizada en un mismo libro de Google Sheets que contiene dos pestañas:
-
-1. **Pestaña `Alumnos`:** Contiene la lista maestra escolar con las columnas: `ID`, `Matrícula`, `Nombre`, `Maestro`, `Materia`, `Hora` y `Salón`.
-2. **Pestaña `Equipos`:** Registra las asignaciones con las columnas: `MATRICULA`, `EQUIPO`, `PROYECTO`, `DESCRIPCION`, `HORA` y `SALON`. *No edites esta pestaña manualmente para evitar corromper los datos del sistema.*
-
----
- desarrollado con ❤️ utilizando Google Apps Script, Bulma CSS y JavaScript Vanilla.
