@@ -1,0 +1,314 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <base target="_top">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bulma@0.9.4/css/bulma.min.css">
+    <style>
+      .hidden { display: none !important; }
+      .tag-alerta { display: block; margin-top: 4px; max-width: max-content; }
+      
+      #seccionReporte ul { padding-left: 15px; margin: 0; }
+      #seccionReporte li { font-size: 0.9rem; margin-bottom: 2px; }
+
+      /* Toast Notification banner */
+      #notificationBanner {
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        z-index: 9999;
+        min-width: 320px;
+        max-width: 450px;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+        transition: all 0.3s ease;
+      }
+
+      @media print {
+        body * { visibility: hidden; }
+        #seccionReporte, #seccionReporte * { visibility: visible; }
+        #seccionReporte { position: absolute; left: 0; top: 0; width: 100%; }
+        tr { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+      }
+    </style>
+  </head>
+  <body class="section">
+    <!-- Banner elegante de notificaciones -->
+    <div id="notificationBanner" class="notification hidden">
+      <button class="delete" onclick="ocultarNotificacion()"></button>
+      <span id="notificationMessage"></span>
+    </div>
+
+    <div class="container">
+      <h1 class="title">Organizador de Equipos</h1>
+      
+      <div id="panelFiltros" class="box">
+        <div class="columns">
+          <div class="column">
+            <label class="label">Hora:</label>
+            <input class="input" type="number" id="hora" placeholder="Ej. 1">
+          </div>
+          <div class="column">
+            <label class="label">Salón:</label>
+            <input class="input" type="number" id="salon" placeholder="Ej. 303">
+          </div>
+          <div class="column"><br>
+            <div class="buttons">
+              <button id="btnCargar" class="button is-link" style="flex: 1;" onclick="buscarAlumnos()">Cargar Alumnos</button>
+              <button class="button is-info is-light" onclick="generarReporte()">📄 Generar Reporte PDF</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div id="infoClase" class="notification is-light hidden">
+        <p><strong>Materia:</strong> <span id="txtMateria"></span></p>
+        <p><strong>Maestro:</strong> <span id="txtMaestro"></span></p>
+        <p><strong>División:</strong> <span id="txtDivision"></span></p>
+      </div>
+
+      <div id="seccionEquipo" class="hidden">
+        <div class="box">
+          <h2 class="subtitle">Datos del Proyecto</h2>
+          <input class="input mb-2" type="text" id="nombreEquipo" placeholder="Nombre del Equipo *">
+          <input class="input mb-2" type="text" id="nombreProyecto" placeholder="Nombre del Proyecto *">
+          <textarea class="textarea mb-2" id="descProyecto" placeholder="Descripción breve... *"></textarea>
+        </div>
+
+        <table class="table is-fullwidth is-hoverable">
+          <thead>
+            <tr>
+              <th>Sel.</th>
+              <th>Matrícula</th>
+              <th>Nombre</th>
+              <th>Equipo / Estado Actual</th>
+            </tr>
+          </thead>
+          <tbody id="tablaAlumnos"></tbody>
+        </table>
+        
+        <div class="buttons">
+          <button id="btnGuardar" class="button is-success is-large" onclick="salvar()">Guardar Equipo</button>
+          <button class="button is-light is-large" onclick="resetearInterfaz()">Cancelar</button>
+        </div>
+      </div>
+
+      <div id="seccionReporte" class="hidden">
+        <h1 class="title">Reporte de Equipos - <span id="repMateria"></span></h1>
+        <p><strong>Maestro:</strong> <span id="repMaestro"></span> | <strong>Hora:</strong> <span id="repHora"></span> | <strong>Salón:</strong> <span id="repSalon"></span></p>
+        <table class="table is-fullwidth is-bordered mt-4">
+          <thead>
+            <tr>
+              <th>Equipo</th>
+              <th>Proyecto</th>
+              <th>Integrantes</th>
+            </tr>
+          </thead>
+          <tbody id="tablaReporte"></tbody>
+        </table>
+      </div>
+
+    </div>
+
+    <script>
+      let divisionActual = ""; 
+      let notifTimer = null;
+
+      function mostrarNotificacion(mensaje, tipo = "is-warning") {
+        const banner = document.getElementById('notificationBanner');
+        const msgSpan = document.getElementById('notificationMessage');
+        
+        banner.className = `notification ${tipo}`;
+        msgSpan.innerText = mensaje;
+        banner.classList.remove('hidden');
+
+        if (notifTimer) clearTimeout(notifTimer);
+        notifTimer = setTimeout(() => {
+          ocultarNotificacion();
+        }, 5000);
+      }
+
+      function ocultarNotificacion() {
+        document.getElementById('notificationBanner').classList.add('hidden');
+      }
+
+      function obtenerColorEquipo(nombreEquipo) {
+        if (!nombreEquipo) return "transparent";
+        let hash = 0;
+        for (let i = 0; i < nombreEquipo.length; i++) {
+          hash = nombreEquipo.charCodeAt(i) + ((hash << 5) - hash);
+        }
+        const l = 80 + (Math.abs(hash) % 15);
+        return `hsl(140, 65%, ${l}%)`;
+      }
+
+      function buscarAlumnos() {
+        const btn = document.getElementById('btnCargar');
+        btn.classList.add('is-loading');
+        btn.innerText = "CARGANDO...";
+        
+        const h = document.getElementById('hora').value;
+        const s = document.getElementById('salon').value;
+        
+        google.script.run.withSuccessHandler(data => {
+          btn.classList.remove('is-loading');
+          btn.innerText = "Cargar Alumnos";
+          mostrarAlumnos(data);
+        }).getAlumnosFiltrados(h, s);
+      }
+
+      function mostrarAlumnos(res) {
+        document.getElementById('txtMateria').innerText = res.nombreMateria;
+        document.getElementById('txtMaestro').innerText = res.nombreMaestro;
+        document.getElementById('txtDivision').innerText = res.nombreDivision;
+        divisionActual = res.nombreDivision; 
+        
+        document.getElementById('infoClase').classList.remove('hidden');
+
+        const body = document.getElementById('tablaAlumnos');
+        body.innerHTML = "";
+
+        if (!res.listaAlumnos || res.listaAlumnos.length === 0) {
+          body.innerHTML = "<tr><td colspan='4' class='has-text-centered'>No hay alumnos en esta hora/salón.</td></tr>";
+          document.getElementById('seccionEquipo').classList.remove('hidden');
+          return;
+        }
+
+        res.listaAlumnos.forEach(a => {
+          let colorFila = 'transparent';
+          let bloqueEstados = '';
+
+          if (a.equipoActual !== "") {
+            colorFila = obtenerColorEquipo(a.equipoActual);
+            bloqueEstados += `<span class="tag is-black is-outline">${a.equipoActual}</span>`;
+          } else {
+            bloqueEstados += `<span class="tag is-light badge-local">Sin equipo aquí</span>`;
+          }
+
+          if (a.repetido) {
+            bloqueEstados += `<span class="tag is-warning tag-alerta">${a.alertaTexto}</span>`;
+          }
+          
+          body.innerHTML += `
+            <tr style="background-color: ${colorFila}">
+              <td><input type="checkbox" class="alumno-check" value="${a.matricula}"></td>
+              <td>${a.matricula}</td>
+              <td>${a.nombre}</td>
+              <td>
+                ${bloqueEstados}
+                <span class="proyecto-hidden hidden">${a.proyectoActual}</span>
+              </td>
+            </tr>`;
+        });
+        document.getElementById('seccionEquipo').classList.remove('hidden');
+      }
+
+      function salvar() {
+        const btn = document.getElementById('btnGuardar');
+        const checks = document.querySelectorAll('.alumno-check:checked');
+        
+        const nEquipo = document.getElementById('nombreEquipo').value.trim();
+        const nProyecto = document.getElementById('nombreProyecto').value.trim();
+        const dProyecto = document.getElementById('descProyecto').value.trim();
+
+        if (!nEquipo || !nProyecto || !dProyecto) {
+          mostrarNotificacion("⚠️ Debes llenar el Nombre del Equipo, del Proyecto y la Descripción.", "is-warning");
+          return;
+        }
+
+        if (checks.length === 0) {
+          mostrarNotificacion("⚠️ Selecciona al menos un alumno para formar el equipo.", "is-warning");
+          return;
+        }
+
+        btn.classList.add('is-loading');
+        
+        const payload = {
+          hora: document.getElementById('hora').value,
+          salon: document.getElementById('salon').value,
+          nombreMateria: document.getElementById('txtMateria').innerText,
+          materia: document.getElementById('txtMateria').innerText,
+          division: divisionActual,
+          nombreEquipo: nEquipo,
+          proyecto: nProyecto,
+          descripcion: dProyecto,
+          integrantes: Array.from(checks).map(c => ({ matricula: c.value }))
+        };
+
+        google.script.run.withSuccessHandler(res => {
+          btn.classList.remove('is-loading');
+          if (res.success) {
+            mostrarNotificacion(res.message, "is-success");
+            resetearInterfaz();
+          } else {
+            mostrarNotificacion(res.message, "is-danger");
+          }
+        }).guardarEquipos(payload);
+      }
+
+      function resetearInterfaz() {
+        document.getElementById('nombreEquipo').value = "";
+        document.getElementById('nombreProyecto').value = "";
+        document.getElementById('descProyecto').value = "";
+        document.getElementById('seccionEquipo').classList.add('hidden');
+        document.getElementById('infoClase').classList.add('hidden');
+        document.getElementById('btnGuardar').classList.remove('is-loading');
+        window.scrollTo(0,0);
+      }
+
+      function generarReporte() {
+        const h = document.getElementById('hora').value;
+        const s = document.getElementById('salon').value;
+        if(!h || !s) return mostrarNotificacion("Primero carga una clase con alumnos.", "is-info");
+
+        const filas = document.querySelectorAll('#tablaAlumnos tr');
+        const equiposMap = {};
+
+        filas.forEach(fila => {
+          if(fila.cells.length < 4) return;
+
+          const matricula = fila.cells[1].innerText;
+          const nombre = fila.cells[2].innerText;
+          
+          const tagElement = fila.cells[3].querySelector('.tag.is-black');
+          const equipo = tagElement ? tagElement.innerText : "Sin equipo";
+          const proyecto = fila.cells[3].querySelector('.proyecto-hidden').innerText;
+          
+          if(equipo !== "Sin equipo") {
+            if(!equiposMap[equipo]) {
+              equiposMap[equipo] = {
+                integrantes: [],
+                proyecto: proyecto || "Proyecto no definido" 
+              };
+            }
+            equiposMap[equipo].integrantes.push(`<li>(${matricula}) ${nombre}</li>`);
+          }
+        });
+
+        const repBody = document.getElementById('tablaReporte');
+        repBody.innerHTML = "";
+        
+        if (Object.keys(equiposMap).length === 0) {
+          repBody.innerHTML = "<tr><td colspan='3' class='has-text-centered'>No hay alumnos asignados a equipos en esta clase.</td></tr>";
+        }
+
+        for (let eq in equiposMap) {
+          repBody.innerHTML += `
+            <tr>
+              <td style="vertical-align: middle;"><strong>${eq}</strong></td>
+              <td style="vertical-align: middle;">${equiposMap[eq].proyecto}</td>
+              <td><ul style="list-style-type: disc; margin-left: 20px;">${equiposMap[eq].integrantes.join("")}</ul></td>
+            </tr>`;
+        }
+
+        document.getElementById('repMateria').innerText = document.getElementById('txtMateria').innerText;
+        document.getElementById('repMaestro').innerText = document.getElementById('txtMaestro').innerText;
+        document.getElementById('repHora').innerText = h;
+        document.getElementById('repSalon').innerText = s;
+
+        const rep = document.getElementById('seccionReporte');
+        rep.classList.remove('hidden');
+        window.print();
+        rep.classList.add('hidden');
+      }
+    </script>
+  </body>
+</html>
